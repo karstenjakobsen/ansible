@@ -152,7 +152,7 @@ class VmwareDrsGroupManager(PyVmomi):
     """
 
     def __init__(self, module, cluster_name, group_name, state,
-                 datacenter_name=None, vm_list=None, host_list=None):
+                 datacenter_name=None, vm_list=None, host_list=None, overwrite=None):
         """
         Init
         """
@@ -174,6 +174,7 @@ class VmwareDrsGroupManager(PyVmomi):
         self.__result = dict()
         self.__changed = False
         self.__state = state
+        self.__overwrite = overwrite
 
         if datacenter_name is not None:
 
@@ -373,6 +374,44 @@ class VmwareDrsGroupManager(PyVmomi):
 
         return obj_name_list
 
+    # def __check_contains_all_vm_or_host(self, group_name=None, cluster_obj=None, host_group=False):
+    #     """
+    #     Function to check if the vms/hosts in our list already exist in group
+    #     Args:
+    #         group_name: Name of group
+    #         cluster_obj: vim Cluster object
+    #         host_group: True if we want to check hosts, else check vms
+    #
+    #     Returns: Bool
+    #
+    #     """
+    #
+    #     number_instances_to_find = len(self.__host_list)
+    #     found_all_instances = False
+    #
+    #     if group_name is None:
+    #         group_name = self.__group_name
+    #
+    #     if cluster_obj is None:
+    #         cluster_obj = self.__cluster_obj
+    #
+    #     # Set lists and check if they are different
+    #     list_a = self.__host_list if host_group else self.__vm_list
+    #     list_b = self.__populate_vm_host_list(host_group=host_group)
+    #
+    #     current_list = set(self.__host_list)
+    #
+    #     set([1, 2]).issubset(current_list)
+    #
+    #     if host_group:
+    #         for host in self.__host_list
+    #             if
+    #
+    #
+    #
+    #     return found_all_instances
+
+
     def __check_if_vms_hosts_changed(self, group_name=None, cluster_obj=None, host_group=False):
         """
         Function to check if VMs/Hosts changed
@@ -391,14 +430,29 @@ class VmwareDrsGroupManager(PyVmomi):
         if cluster_obj is None:
             cluster_obj = self.__cluster_obj
 
+        # Set lists and check if they are different
         list_a = self.__host_list if host_group else self.__vm_list
         list_b = self.__populate_vm_host_list(host_group=host_group)
 
-        # By casting lists as a set, you remove duplicates and order doesn't count. Comparing sets is also much faster and more efficient than comparing lists.
-        if set(list_a) == set(list_b):
-            return False
+        # If overwrite then check existing list contains all our hosts/vms
+        if self.__overwrite:
+            # By casting lists as a set, you remove duplicates and order doesn't count. Comparing sets is also much faster and more efficient than comparing lists.
+            if set(list_a) == set(list_b):
+                return False
+            else:
+                return True
         else:
-            return True
+            # If all items are unique, you can use sets to check subsets
+            if not set(list_a).issubset(list_b):
+                # Set new lists adding our changes
+                if host_group:
+                    self.__host_list = set(list_a + list_b)
+                else:
+                    self.__vm_list = set(list_a + list_b)
+
+                return True
+
+            return False
 
     def __create_host_group(self):
 
@@ -526,6 +580,7 @@ def main():
         datacenter=dict(type='str', required=False, aliases=['datacenter_name']),
         cluster_name=dict(type='str', required=True),
         group_name=dict(type='str', required=True),
+        overwrite=dict(type='bool', required=False, default=True),
         vms=dict(type='list'),
         hosts=dict(type='list')
     )
@@ -550,7 +605,8 @@ def main():
                                                  group_name=module.params['group_name'],
                                                  vm_list=module.params['vms'],
                                                  host_list=module.params['hosts'],
-                                                 state=module.params['state'])
+                                                 state=module.params['state'],
+                                                 overwrite=module.params['overwrite'])
 
         if module.params['state'] == 'present':
             # Add DRS group
